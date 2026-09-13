@@ -2,6 +2,7 @@ import { Injectable, effect, inject, signal } from '@angular/core';
 import { ApiError, ApiService } from './api';
 import { GraphStore } from './graph-store';
 import { ChatMessage } from './models';
+import { RunStore } from './run-store';
 
 const STORAGE = 'stratum.chat.v1';
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -11,6 +12,7 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 export class ChatStore {
   private readonly api = inject(ApiService);
   private readonly graph = inject(GraphStore);
+  private readonly run = inject(RunStore);
 
   readonly messages = signal<ChatMessage[]>(load());
   readonly pending = signal(false);
@@ -50,6 +52,7 @@ export class ChatStore {
   apply(id: string): void {
     const msg = this.messages().find((m) => m.id === id);
     if (!msg?.proposal) return;
+    this.run.reset(); // the previous run belongs to the previous graph
     this.graph.load(msg.proposal.spec);
     this.messages.update((all) => all.map((m) => (m.id === id ? { ...m, applied: true } : m)));
   }

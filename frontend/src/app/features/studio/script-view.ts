@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, injec
 import { ApiService } from '../../core/api';
 import { GraphStore } from '../../core/graph-store';
 import { Diagnostic, GraphSpec, ScriptError } from '../../core/models';
+import { RunStore } from '../../core/run-store';
 import { Autocomplete, CHEATS, ScriptHighlightPipe } from '../../core/script-tools';
 import { UiStore } from '../../core/ui-store';
 import { GraphMiniComponent } from './graph-mini';
@@ -21,6 +22,7 @@ export class ScriptViewComponent {
   readonly graph = inject(GraphStore);
   readonly ui = inject(UiStore);
   private readonly api = inject(ApiService);
+  private readonly run = inject(RunStore);
   readonly ac = new Autocomplete();
   readonly cheats = CHEATS;
 
@@ -120,6 +122,7 @@ export class ScriptViewComponent {
     const p = this.preview();
     if (!this.canApply() || !p) return;
     const cur = this.graph.spec();
+    this.run.reset(); // structure changed — the last run no longer matches the canvas
     this.graph.load({ ...p, id: cur.id, name: cur.name, description: cur.description });
     this.dirty.set(false);
     this.preview.set(null);

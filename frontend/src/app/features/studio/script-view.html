@@ -1,0 +1,85 @@
+<div class="editor-pane">
+  <div class="bar">
+    <span class="title">Stratum Script</span>
+    <div class="seg" aria-label="Detail">
+      <button type="button" [class.on]="!compact()" (click)="compact.set(false)" title="Include instructions">Full</button>
+      <button type="button" [class.on]="compact()" (click)="compact.set(true)" title="Structure only — instructions are kept from the canvas">Compact</button>
+    </div>
+    <span class="sync" [attr.data-state]="error() ? 'error' : dirty() ? 'dirty' : 'synced'">
+      @if (error()) { ● syntax error } @else if (dirty()) { ● edited — not applied } @else { ● synced with canvas }
+    </span>
+    <span class="grow"></span>
+    <button class="btn btn-ghost" type="button" [disabled]="!dirty()" (click)="revert()">Revert</button>
+    <button class="btn btn-primary" type="button" [disabled]="!canApply()" (click)="apply()">Apply to canvas <span class="kbd">Ctrl S</span></button>
+  </div>
+
+  <div class="editor" [class.has-error]="error()">
+    <div class="gutter mono" #gutter aria-hidden="true">
+      @for (n of lines(); track n) {
+        <span [class.bad]="error()?.line === n">{{ n }}</span>
+      }
+    </div>
+    <div class="code-area">
+      <pre class="hl mono" #hl aria-hidden="true" [innerHTML]="(text() + '\n') | scriptHighlight"></pre>
+      <textarea
+        #ta
+        class="mono"
+        wrap="off"
+        spellcheck="false"
+        autocapitalize="off"
+        [value]="text()"
+        (input)="onInput($event)"
+        (keydown)="onKey($event)"
+        (scroll)="syncScroll()"
+        (blur)="ac.close()"
+        aria-label="Stratum Script editor"
+      ></textarea>
+    </div>
+    @if (ac.items().length) {
+      <ul class="suggest" role="listbox">
+        @for (s of ac.items(); track s.label; let i = $index) {
+          <li role="option" [class.on]="i === ac.index()" [attr.aria-selected]="i === ac.index()" (mousedown)="$event.preventDefault(); ac.accept(ta, setText.bind(this), i)">
+            <span class="mono">{{ s.label }}</span><span class="faint">{{ s.detail }}</span>
+          </li>
+        }
+      </ul>
+    }
+  </div>
+
+  @if (error(); as e) {
+    <button class="error-bar" type="button" (click)="gotoError()">
+      ✕ {{ e.message }} <span class="mono">line {{ e.line }}, col {{ e.col }}</span>
+    </button>
+  } @else {
+    <p class="hint">
+      One layer per <b class="mono">&#64;name(…)</b>. Names you keep keep their instructions, models and wiring — edit structure freely, then apply.
+      <span class="kbd">Tab</span> accepts a suggestion.
+    </p>
+  }
+</div>
+
+<aside class="preview-pane">
+  <div class="p-head">
+    <span class="eyebrow">{{ dirty() ? 'Live preview' : 'Canvas' }}</span>
+    @if (parsing()) { <span class="spin"></span> }
+  </div>
+  @if (summary() && dirty()) { <p class="summary">{{ summary() }}</p> }
+  <app-graph-mini [spec]="(dirty() && preview()) || graph.spec()" [compare]="dirty() && preview() ? graph.spec() : null" />
+  @if (dirty() && preview()) {
+    @for (d of diagnostics(); track $index) {
+      <p class="diag" [attr.data-level]="d.level">{{ d.level === 'error' ? '●' : '▲' }} {{ d.message }}</p>
+    } @empty {
+      <p class="ok">✓ Valid — ready to apply.</p>
+    }
+  }
+
+  <div class="p-head cheat-head"><span class="eyebrow">Cheatsheet</span><span class="faint small">click to append</span></div>
+  <ul class="cheats">
+    @for (c of cheats; track c.code) {
+      <li>
+        <button type="button" (click)="insert(c.code)"><code [innerHTML]="c.code | scriptHighlight"></code></button>
+        <span>{{ c.text }}</span>
+      </li>
+    }
+  </ul>
+</aside>

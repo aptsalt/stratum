@@ -1,0 +1,139 @@
+<div class="studio" [style.--dock-h.px]="ui.dockOpen() ? dockHeight() : 41">
+  <!-- ───────── toolbar ───────── -->
+  <div class="toolbar">
+    <div class="tb-left">
+      <span class="graph-glyph" aria-hidden="true">◇</span>
+      <input class="graph-name" [value]="store.spec().name" (input)="store.updateGraph({ name: value($event) })" aria-label="Graph name" spellcheck="false" />
+      <span class="saved faint">autosaved</span>
+    </div>
+
+    <div class="seg compile" aria-label="Compile target">
+      <button type="button" [class.on]="store.mode() === 'graph'" (click)="store.mode.set('graph')" title="Static edges: Workflow(edges=[…])">⬡ Graph workflow</button>
+      <button type="button" [class.on]="store.mode() === 'dynamic'" (click)="store.mode.set('dynamic')" title="@node orchestrator using ctx.run_node">ƒ Dynamic workflow</button>
+    </div>
+
+    <div class="tb-right">
+      <button class="icon-btn" type="button" [disabled]="!store.canUndo()" (click)="store.undo()" title="Undo (Ctrl+Z)">↶</button>
+      <button class="icon-btn" type="button" [disabled]="!store.canRedo()" (click)="store.redo()" title="Redo (Ctrl+Shift+Z)">↷</button>
+      <span class="sep"></span>
+      <label class="btn btn-ghost" title="Import a .stratum.json graph">
+        Import
+        <input type="file" accept="application/json,.json" hidden (change)="importJson($event)" />
+      </label>
+      <button class="btn btn-ghost" type="button" (click)="exportJson()">Export</button>
+      <button class="btn btn-ghost" type="button" (click)="ui.openDock('code')">&lt;/&gt; Python</button>
+      <button class="health" type="button" [attr.data-tone]="healthState().tone" (click)="ui.openDock('problems')" title="Validation">
+        <span class="dot" [class.ok]="healthState().tone === 'ok'" [class.bad]="healthState().tone === 'bad'" [class.warn]="healthState().tone === 'warn'"></span>
+        {{ healthState().text }}
+      </button>
+      <button class="btn btn-primary run" type="button" [disabled]="!canRun()" (click)="runGraph()">
+        @if (run.busy()) { <span class="spin"></span> Running } @else { ▶ Run }
+        <span class="kbd">Ctrl ↵</span>
+      </button>
+    </div>
+  </div>
+
+  @if (store.offline()) {
+    <div class="banner">
+      <b>Backend offline.</b> Start the ADK runtime with <code>npm run api</code> (FastAPI on :8000) — edits still autosave locally.
+    </div>
+  }
+
+  <!-- ───────── main ───────── -->
+  <div class="main" [class.focus]="ui.view() !== 'graph'">
+    <aside class="rail">
+      <section>
+        <div class="rail-title">Templates</div>
+        @for (t of store.templates(); track t.id) {
+          <button type="button" class="tpl" [class.on]="store.spec().id === t.id" (click)="loadTemplate(t)">
+            <span class="tpl-strip" aria-hidden="true">
+              @for (l of t.layers; track l.id) { <i [attr.data-kind]="l.kind" [style.flex]="l.nodes.length"></i> }
+            </span>
+            <b>{{ t.name }}</b>
+            <span>{{ t.description }}</span>
+          </button>
+        } @empty {
+          <p class="faint small">Templates load from the backend.</p>
+        }
+      </section>
+
+      <section>
+        <div class="rail-title">Add a layer</div>
+        @for (k of kindOrder; track k) {
+          <button type="button" class="kind-card" [attr.data-kind]="k" (click)="store.addLayer(store.spec().layers.length, k)">
+            <span class="g">{{ kinds[k].glyph }}</span>
+            <span class="kc-text"><b>{{ kinds[k].label }}</b><small>{{ kinds[k].blurb }}</small></span>
+          </button>
+        }
+      </section>
+
+      <section class="legend">
+        <div class="rail-title">Edges</div>
+        <div class="lg"><i class="l data"></i>data flow</div>
+        <div class="lg"><i class="l skip"></i>skip-level input</div>
+        <div class="lg"><i class="l route"></i>router branch</div>
+        <div class="lg"><i class="l loop"></i>loop back-edge</div>
+        <div class="lg"><span class="jb">⋈</span>JoinNode barrier</div>
+      </section>
+    </aside>
+
+    <div class="stage-area">
+      <div class="views" role="tablist" aria-label="View">
+        @for (v of views; track v.id) {
+          <button type="button" role="tab" class="view-tab" [class.on]="ui.view() === v.id" [attr.aria-selected]="ui.view() === v.id" (click)="ui.setView(v.id)" [title]="v.hint">
+            <span class="vg">{{ v.glyph }}</span>{{ v.label }}<span class="kbd">Alt {{ $index + 1 }}</span>
+          </button>
+        }
+        <span class="view-hint faint">{{ viewHint() }}</span>
+      </div>
+      @switch (ui.view()) {
+        @case ('chat') { <app-chat-view /> }
+        @case ('script') { <app-script-view /> }
+        @default { <app-canvas /> }
+      }
+      @if (!coachDismissed() && ui.view() === 'graph') {
+        <div class="coach">
+          <span class="step"><b>1</b> Pick a template or add layers</span>
+          <span class="step"><b>2</b> Wire inputs in the inspector</span>
+          <span class="step"><b>3</b> Run on the real ADK runtime</span>
+          <button class="icon-btn" type="button" (click)="dismissCoach()" aria-label="Dismiss">✕</button>
+        </div>
+      }
+      @if (run.interrupt(); as gate) {
+        <div class="gate" role="dialog" aria-label="Human approval required">
+          <div class="gate-head">
+            <span class="gate-pulse"></span>
+            Human gate · <b class="mono">{{ gate.node }}</b>
+          </div>
+          <h3>{{ gate.message }}</h3>
+          @if (gate.payload?.preview) { <pre class="gate-preview">{{ gate.payload?.preview }}</pre> }
+          @if (rejecting()) {
+            <textarea class="textarea" rows="2" placeholder="Why reject? (recorded as the human response)" [value]="reason()" (input)="reason.set(value($event))"></textarea>
+            <div class="gate-actions">
+              <button class="btn btn-bad" type="button" (click)="confirmReject()">Confirm reject</button>
+              <button class="btn btn-ghost" type="button" (click)="rejecting.set(false)">Cancel</button>
+            </div>
+          } @else {
+            <div class="gate-actions">
+              <button class="btn btn-ok" type="button" (click)="approve()">✓ Approve &amp; resume</button>
+              <button class="btn btn-bad" type="button" (click)="rejecting.set(true)">✕ Reject</button>
+            </div>
+          }
+          <p class="faint small gate-foot">ADK paused on <code>RequestInput</code>. Your answer resumes the same invocation — finished agents are not re-run.</p>
+        </div>
+      }
+    </div>
+
+    <app-inspector />
+  </div>
+
+  <!-- ───────── dock ───────── -->
+  <div class="dock-area">
+    <div class="resize" (pointerdown)="startResize($event)" title="Drag to resize"></div>
+    <app-run-dock [geminiReady]="!!health()?.engines?.gemini" [health]="health()" />
+  </div>
+</div>
+
+@if (ui.paletteOpen()) {
+  <app-command-palette [actions]="actions()" (closed)="ui.paletteOpen.set(false)" />
+}

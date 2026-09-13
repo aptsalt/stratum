@@ -1,0 +1,139 @@
+<div class="chat">
+  <div class="thread" #thread [class.is-empty]="!chat.messages().length">
+    @if (!chat.messages().length) {
+      <div class="welcome">
+        <div class="welcome-mark">✦</div>
+        <h2>Describe your agent graph</h2>
+        <p>
+          Say it in plain English — or type Stratum Script like
+          <code class="inline" [innerHTML]="'@research(a, b, c), @combine(merge), @signoff(human)' | scriptHighlight"></code>.
+          Every answer is a proposal you preview before it touches the canvas.
+        </p>
+        <div class="examples">
+          @for (ex of examples; track ex.title; let i = $index) {
+            <button type="button" class="example" [style.animation-delay.ms]="i * 60" (click)="use(ex.text)">
+              <span class="ex-title">{{ ex.title }}</span>
+              @if (isScript(ex.text)) {
+                <code [innerHTML]="ex.text | scriptHighlight"></code>
+              } @else {
+                <span class="ex-text">{{ ex.text }}</span>
+              }
+            </button>
+          }
+        </div>
+      </div>
+    }
+
+    @for (m of chat.messages(); track m.id) {
+      <div class="msg" [class.user]="m.role === 'user'">
+        <span class="avatar" [class.you]="m.role === 'user'">{{ m.role === 'user' ? 'You' : '✦' }}</span>
+        <div class="bubble" [class.err]="m.error">
+          @if (m.role === 'user' && isScript(m.content)) {
+            <pre class="script-inline" [innerHTML]="m.content | scriptHighlight"></pre>
+          } @else {
+            <p class="text">{{ m.content }}</p>
+          }
+
+          @if (m.proposal; as p) {
+            <div class="proposal" [class.applied]="m.applied">
+              <div class="p-head">
+                <span class="eyebrow">Proposed graph</span>
+                @if (compareTo()) {
+                  <span class="delta">
+                    @if (diff(p).added) { <span class="plus">+{{ diff(p).added }}</span> }
+                    @if (diff(p).removed) { <span class="minus">−{{ diff(p).removed }}</span> }
+                  </span>
+                }
+                <span class="grow"></span>
+                <span class="engine" [attr.data-engine]="m.engine">{{ m.engine === 'gemini' ? 'Gemini' : m.engine === 'script' ? 'script · exact' : 'offline parser' }}</span>
+              </div>
+              <app-graph-mini [spec]="p.spec" [compare]="m.applied ? null : compareTo()" />
+              <details class="p-script">
+                <summary>Stratum Script</summary>
+                <pre [innerHTML]="p.script | scriptHighlight"></pre>
+              </details>
+              @if (errors(p)) {
+                @for (d of p.diagnostics; track $index) {
+                  <p class="diag" [attr.data-level]="d.level">{{ d.level === 'error' ? '●' : '▲' }} {{ d.message }}</p>
+                }
+              } @else {
+                <p class="ok">✓ Valid — compiles to an ADK workflow.</p>
+              }
+              <div class="p-actions">
+                @if (m.applied) {
+                  <span class="applied-tag">✓ Applied to canvas</span>
+                  <button class="btn btn-ghost" type="button" (click)="ui.setView('graph')">View graph →</button>
+                } @else {
+                  <button class="btn btn-primary" type="button" [disabled]="errors(p) > 0" (click)="apply(m)">Apply to canvas</button>
+                  <button class="btn" type="button" (click)="openInScript(p)">Edit as script</button>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    @if (chat.pending()) {
+      <div class="msg">
+        <span class="avatar">✦</span>
+        <div class="bubble typing"><i></i><i></i><i></i></div>
+      </div>
+    }
+  </div>
+
+  <div class="composer">
+    @if (ac.items().length) {
+      <ul class="suggest" role="listbox">
+        @for (s of ac.items(); track s.label; let i = $index) {
+          <li role="option" [class.on]="i === ac.index()" [attr.aria-selected]="i === ac.index()" (mousedown)="$event.preventDefault(); ac.accept(box, chat.draft.set.bind(chat.draft), i)">
+            <span class="mono">{{ s.label }}</span><span class="faint">{{ s.detail }}</span>
+          </li>
+        }
+      </ul>
+    }
+    <div class="composer-box">
+      <textarea
+        #box
+        rows="2"
+        [value]="chat.draft()"
+        (input)="onInput($event)"
+        (keydown)="onKey($event)"
+        (blur)="ac.close()"
+        placeholder="e.g. research with 3 analysts, merge, then a writer/editor loop — or type &#64;stage(…)"
+        aria-label="Message"
+      ></textarea>
+      <button class="send" type="button" [disabled]="!chat.draft().trim() || chat.pending()" (click)="send()" aria-label="Send">↑</button>
+    </div>
+    <div class="composer-foot">
+      <span><span class="kbd">↵</span> send · <span class="kbd">⇧ ↵</span> newline · <span class="kbd">&#64;</span> layers &amp; snippets</span>
+      @if (chat.messages().length) {
+        <button class="link" type="button" (click)="chat.clear()">Clear conversation</button>
+      }
+    </div>
+  </div>
+</div>
+
+<aside class="side">
+  <section class="side-card">
+    <div class="side-head">
+      <span class="eyebrow">Current canvas</span>
+      <button class="link" type="button" (click)="ui.setView('graph')">Open graph →</button>
+    </div>
+    <b class="side-name">{{ graph.spec().name }}</b>
+    <app-graph-mini [spec]="graph.spec()" />
+  </section>
+  <section class="side-card">
+    <span class="eyebrow">Script cheatsheet</span>
+    <ul class="cheats">
+      @for (c of cheats; track c.code) {
+        <li>
+          <button type="button" (click)="insert(c.code)" title="Insert">
+            <code [innerHTML]="c.code | scriptHighlight"></code>
+          </button>
+          <span>{{ c.text }}</span>
+        </li>
+      }
+    </ul>
+  </section>
+</aside>

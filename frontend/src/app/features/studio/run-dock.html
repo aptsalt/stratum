@@ -1,0 +1,185 @@
+<section class="dock" [class.closed]="!ui.dockOpen()">
+  <nav class="dock-tabs" role="tablist">
+    @for (t of tabs; track t.id) {
+      <button
+        type="button"
+        role="tab"
+        class="tab"
+        [class.on]="ui.dockTab() === t.id && ui.dockOpen()"
+        [attr.aria-selected]="ui.dockTab() === t.id"
+        (click)="ui.openDock(t.id)"
+      >
+        {{ t.label }}
+        @if (t.id === 'problems' && store.diagnostics().length) {
+          <span class="count" [class.bad]="store.errors().length">{{ store.diagnostics().length }}</span>
+        }
+        @if (t.id === 'run' && run.busy()) { <span class="live"></span> }
+      </button>
+    }
+    <span class="grow"></span>
+    @if (run.status() !== 'idle') {
+      <span class="run-pill" [attr.data-status]="run.status()">
+        {{ run.status() }} · <span class="mono">{{ (run.clock() / 1000).toFixed(1) }}s</span>
+        @if (parallelPeak() > 1) { · peak {{ parallelPeak() }}× parallel }
+      </span>
+    }
+    <button class="icon-btn" type="button" (click)="ui.dockOpen.set(!ui.dockOpen())" [title]="ui.dockOpen() ? 'Collapse' : 'Expand'">
+      {{ ui.dockOpen() ? '▾' : '▴' }}
+    </button>
+  </nav>
+
+  @if (ui.dockOpen()) {
+    <div class="dock-body">
+      @switch (ui.dockTab()) {
+        <!-- ───────── RUN ───────── -->
+        @case ('run') {
+          <div class="run-grid">
+            <div class="run-input">
+              <label class="label" for="run-in">Input message</label>
+              <textarea id="run-in" class="textarea" rows="3" [value]="run.input()" (input)="onInput($event)" placeholder="What should the graph work on?"></textarea>
+              <div class="run-opts">
+                <div class="seg" aria-label="Engine">
+                  <button type="button" [class.on]="run.engine() === 'mock'" (click)="run.engine.set('mock')" title="Real ADK runtime, stubbed model calls">Mock LLM</button>
+                  <button type="button" [class.on]="run.engine() === 'gemini'" [disabled]="!geminiReady()" (click)="run.engine.set('gemini')" [title]="geminiReady() ? 'Real Gemini calls' : 'Add GOOGLE_API_KEY to backend/.env'">Gemini</button>
+                </div>
+                <span class="faint small">{{ store.mode() === 'graph' ? 'graph' : 'dynamic' }} workflow</span>
+              </div>
+              <p class="faint small engine-note">
+                @if (run.engine() === 'mock') {
+                  The real ADK 2 engine runs your graph — fan-out, JoinNode, routes, loops, RequestInput — with model calls stubbed.
+                } @else {
+                  Live Gemini calls via LlmAgent. Token usage is reported per node.
+                }
+              </p>
+              @if (run.error()) {
+                <div class="err">
+                  <b>Run failed.</b> {{ run.error() }}
+                  @for (d of run.errorDiagnostics(); track $index) { <div class="small">• {{ d.message }}</div> }
+                </div>
+              }
+            </div>
+
+            <div class="timeline">
+              <div class="tl-head">
+                <span class="label">Timeline</span>
+                <span class="faint small">bars that overlap ran concurrently</span>
+              </div>
+              @if (run.status() === 'idle') {
+                <div class="empty">
+                  <span class="empty-icon">▶</span>
+                  <p>Press <b>Run</b> to execute this graph on the ADK runtime.<br /><span class="faint">Parallel layers show up as stacked, overlapping bars.</span></p>
+                </div>
+              } @else {
+                <div class="tl-grid">
+                  <div class="tl-axis">
+                    @for (t of ticks(); track t.left) { <span [style.left.%]="t.left">{{ t.label }}</span> }
+                  </div>
+                  @for (r of rows(); track r.name) {
+                    <button type="button" class="tl-row" [attr.data-kind]="r.kind" [attr.data-status]="r.status" (click)="selectByName(r.name)">
+                      <span class="tl-name mono"><i>{{ r.layer }}</i>{{ r.name }}</span>
+                      <span class="tl-track">
+                        @for (t of ticks(); track t.left) { <i class="grid-line" [style.left.%]="t.left"></i> }
+                        @for (b of r.bars; track $index) {
+                          <span class="bar" [class.open]="b.open" [style.left.%]="b.left" [style.width.%]="b.width"></span>
+                        }
+                        @if (r.status === 'skipped') { <span class="skipped">not taken</span> }
+                      </span>
+                    </button>
+                  }
+                </div>
+              }
+            </div>
+
+            <div class="run-out">
+              @if (run.output() && run.status() === 'completed') {
+                <div class="final">
+                  <span class="label">Final output</span>
+                  <pre>{{ run.output() }}</pre>
+                </div>
+              }
+              <span class="label">Event stream <span class="faint">SSE</span></span>
+              <ol class="log mono" #logEl>
+                @for (e of visibleLog(); track $index) {
+                  <li [attr.data-type]="e.type"><span class="t">{{ (e.t / 1000).toFixed(2) }}</span>{{ describe(e) }}</li>
+                } @empty {
+                  <li class="faint">Events appear here as ADK emits them.</li>
+                }
+              </ol>
+            </div>
+          </div>
+        }
+
+        <!-- ───────── CODE ───────── -->
+        @case ('code') {
+          <div class="code-wrap">
+            <div class="code-bar">
+              <div class="seg">
+                <button type="button" [class.on]="store.mode() === 'graph'" (click)="store.mode.set('graph')">Graph workflow</button>
+                <button type="button" [class.on]="store.mode() === 'dynamic'" (click)="store.mode.set('dynamic')">Dynamic workflow</button>
+              </div>
+              <span class="file mono">agent.py</span>
+              <span class="faint small">{{ store.mode() === 'graph' ? 'static edges — Workflow(edges=[…])' : '@node orchestrator using ctx.run_node + asyncio.gather' }}</span>
+              <span class="grow"></span>
+              <button class="btn" type="button" (click)="copyCode()" [disabled]="!store.compiled()?.code">{{ copied() ? '✓ Copied' : 'Copy' }}</button>
+              <button class="btn" type="button" (click)="downloadCode()" [disabled]="!store.compiled()?.code">Download .py</button>
+            </div>
+            @if (store.compiled()?.code; as code) {
+              <pre class="code"><code [innerHTML]="code | pyHighlight"></code></pre>
+            } @else {
+              <div class="empty"><p>Fix the problems in this graph to see the generated Python.</p></div>
+            }
+          </div>
+        }
+
+        <!-- ───────── IR ───────── -->
+        @case ('ir') {
+          @if (irGroups(); as ir) {
+            <div class="ir">
+              <p class="faint small ir-intro">
+                What the ADK <code>Workflow</code> actually receives. Stratum adds <b>{{ ir.internal }}</b> helper nodes you never draw:
+                <span class="role join">join</span> barriers, <span class="role router_fn">router_fn</span> route mappers,
+                <span class="role loop_gate">loop_gate</span> back-edges and <span class="role human_decide">human_decide</span> gates.
+              </p>
+              <div class="ir-cols">
+                <div>
+                  <span class="label">Nodes · {{ ir.nodes.length }}</span>
+                  <ul class="ir-list">
+                    @for (n of ir.nodes; track n.name) {
+                      <li [class.internal]="n.internal"><span class="role" [class]="'role ' + n.role">{{ n.role }}</span><span class="mono">{{ n.name }}</span></li>
+                    }
+                  </ul>
+                </div>
+                <div>
+                  <span class="label">Edges · {{ ir.edges.length }}</span>
+                  <ul class="ir-list">
+                    @for (e of ir.edges; track $index) {
+                      <li class="mono"><span>{{ e.src }}</span><span class="faint">→</span><span>{{ e.dst }}</span>@if (e.route) {<span class="route">[{{ e.route }}]</span>}</li>
+                    }
+                  </ul>
+                </div>
+              </div>
+            </div>
+          } @else {
+            <div class="empty"><p>No compiled graph yet — check Problems.</p></div>
+          }
+        }
+
+        <!-- ───────── PROBLEMS ───────── -->
+        @case ('problems') {
+          <div class="problems">
+            @if (store.offline()) {
+              <p class="err">Backend offline — run <code>npm run api</code> in the project root.</p>
+            }
+            @for (d of store.diagnostics(); track $index) {
+              <button type="button" class="diag" [attr.data-level]="d.level" (click)="locate(d.nodeId, d.layerId)">
+                <span class="lvl">{{ d.level }}</span>{{ d.message }}
+              </button>
+            } @empty {
+              @if (!store.offline()) { <div class="empty"><p class="ok">✓ No problems — the graph validates and compiles.</p></div> }
+            }
+          </div>
+        }
+      }
+    </div>
+  }
+</section>

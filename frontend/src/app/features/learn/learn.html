@@ -1,0 +1,327 @@
+<div class="page learn-page">
+  <div class="page-head">
+    <p class="eyebrow">Guide</p>
+    <h1>How ADK graph workflows work</h1>
+    <p class="muted">
+      Stratum is a visual studio for Google ADK 2.x agent graphs. This page is the mental model behind
+      every canvas you build here: what a node is, how layers map to real ADK code, and how a graph
+      goes from a JSON spec on screen to a running, streaming agent.
+    </p>
+  </div>
+
+  <div class="learn-layout">
+    <nav class="toc toc-sticky" aria-label="Table of contents">
+      <p class="small faint toc-title">On this page</p>
+      @for (s of sections; track s.id) {
+        <a class="toc-link" [href]="'#' + s.id">{{ s.label }}</a>
+      }
+    </nav>
+
+    <nav class="toc toc-inline" aria-label="Table of contents">
+      @for (s of sections; track s.id) {
+        <a class="chip" [href]="'#' + s.id">{{ s.label }}</a>
+      }
+    </nav>
+
+    <main class="learn-body">
+      <!-- 1. Mental model -->
+      <section id="mental-model" class="card learn-section">
+        <h2>1. The mental model</h2>
+        <p>
+          ADK 2.x replaced the old hierarchical executor with a <strong>graph-based Workflow runtime</strong>.
+          The familiar <span class="mono">SequentialAgent</span>, <span class="mono">ParallelAgent</span> and
+          <span class="mono">LoopAgent</span> classes still work, but they are deprecated in favor of describing
+          the same thing as a <span class="mono">Workflow</span> of nodes and edges.
+        </p>
+        <p>A graph is nodes and edges. A node is one of:</p>
+        <ul>
+          <li><span class="tag">LlmAgent</span> - a model-backed agent, created with <span class="mono">Agent(...)</span>.</li>
+          <li><span class="tag">Function</span> - a plain Python function, auto-wrapped as a <span class="mono">FunctionNode</span>.</li>
+          <li><span class="tag">Tool</span> - a callable the runtime exposes to an agent.</li>
+          <li><span class="tag">Workflow</span> - a nested graph, used as a single node in a bigger one.</li>
+          <li><span class="tag">JoinNode</span> - waits on multiple predecessors and merges their outputs.</li>
+          <li><span class="tag">RequestInput</span> - a human-input pause point.</li>
+        </ul>
+        <p class="muted small">
+          Rule of thumb: if a step is deterministic - parsing, formatting, a lookup, a gate condition - write it
+          as a plain function node. It costs no tokens and runs in milliseconds, and it keeps the graph's
+          token-spending surface limited to the steps that actually need a model.
+        </p>
+      </section>
+
+      <!-- 2. Layers -->
+      <section id="layers" class="card learn-section">
+        <h2>2. Stratum's layers, mapped to ADK</h2>
+        <p>Every layer you drag onto the Stratum canvas compiles to one ADK edge shape.</p>
+
+        <div class="layer-grid">
+          @for (layer of layers; track layer.codeId) {
+            <article class="card layer-card">
+              <div class="layer-card-head">
+                <span class="tag">{{ layer.kind }}</span>
+              </div>
+              <p class="small">{{ layer.meaning }}</p>
+              <div class="code">
+                <div class="code-head">
+                  <span class="mono small faint">{{ layer.filename }}</span>
+                  <button type="button" class="btn btn-ghost btn-copy" (click)="copy(layer.codeId, layer.code)">{{ copiedId() === layer.codeId ? 'Copied' : 'Copy' }}</button>
+                </div>
+                <pre><code class="mono">{{ layer.code }}</code></pre>
+              </div>
+              @if (layer.note) {
+                <p class="small faint">{{ layer.note }}</p>
+              }
+            </article>
+          }
+        </div>
+
+        <h3 class="small-h">dependsOn: skipping levels</h3>
+        <p>
+          Any node may consume <strong>any</strong> earlier layer's output, not just the layer directly above
+          it - Stratum calls this <span class="mono">dependsOn</span>. The moment a node has more than one
+          upstream, Stratum auto-inserts a <span class="mono">JoinNode</span> for you so the node still gets a
+          single, well-defined input.
+        </p>
+        <div class="code">
+          <div class="code-head">
+            <span class="mono small faint">depends_on.py</span>
+            <button type="button" class="btn btn-ghost btn-copy" (click)="copy('depends-on', dependsOnCode)">{{ copiedId() === 'depends-on' ? 'Copied' : 'Copy' }}</button>
+          </div>
+          <pre><code class="mono">{{ dependsOnCode }}</code></pre>
+        </div>
+      </section>
+
+      <!-- 3. Pipeline diagram -->
+      <section id="pipeline" class="card learn-section">
+        <h2>3. From spec to running graph</h2>
+        <p>
+          The canvas you edit is JSON. Stratum validates it, lowers it into ADK's own graph shape, then runs it
+          and streams events back to the same canvas.
+        </p>
+        <div class="diagram-wrap">
+          <svg viewBox="0 0 860 240" class="diagram" role="img" aria-label="GraphSpec is validated, lowered to IR, compiled into a Workflow, run by the ADK Runner, and streamed to the UI over SSE">
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="var(--line-2)" />
+              </marker>
+            </defs>
+
+            <g stroke="var(--line-2)" fill="none" stroke-width="1.5">
+              <rect x="8" y="86" width="112" height="52" rx="10" stroke="var(--k-stage)" />
+              <rect x="164" y="86" width="96" height="52" rx="10" stroke="var(--k-gate)" />
+              <rect x="304" y="86" width="104" height="52" rx="10" stroke="var(--k-code)" />
+              <rect x="452" y="20" width="160" height="52" rx="10" stroke="var(--k-router)" />
+              <rect x="452" y="152" width="160" height="52" rx="10" stroke="var(--k-router)" />
+              <rect x="656" y="86" width="100" height="52" rx="10" stroke="var(--accent)" />
+              <rect x="304" y="176" width="140" height="40" rx="10" stroke="var(--k-loop)" />
+            </g>
+
+            <g fill="var(--text)" font-family="var(--sans)" font-size="12" text-anchor="middle">
+              <text x="64" y="108">GraphSpec</text>
+              <text x="64" y="123" class="diagram-sub">(JSON, UI-edited)</text>
+              <text x="212" y="117">validate</text>
+              <text x="356" y="108">lower to IR</text>
+              <text x="356" y="123" class="diagram-sub">+Join/route/loop</text>
+              <text x="532" y="42">Workflow</text>
+              <text x="532" y="57" class="diagram-sub">graph mode (static edges)</text>
+              <text x="532" y="174">Workflow</text>
+              <text x="532" y="189" class="diagram-sub">dynamic mode (orchestrator)</text>
+              <text x="706" y="108">ADK Runner</text>
+              <text x="706" y="123" class="diagram-sub">to SSE / UI</text>
+              <text x="374" y="200">agent.py</text>
+              <text x="374" y="212" class="diagram-sub">export, run with adk web</text>
+            </g>
+
+            <g stroke="var(--line-2)" fill="none" stroke-width="1.5" marker-end="url(#arrow)">
+              <path d="M120,112 L164,112" />
+              <path d="M260,112 L304,112" />
+              <path d="M408,100 C 428,100 428,46 452,46" />
+              <path d="M408,124 C 428,124 428,178 452,178" />
+              <path d="M612,46 C 636,46 636,100 656,100" />
+              <path d="M612,178 C 636,178 636,124 656,124" />
+              <path d="M356,138 L356,176" />
+            </g>
+          </svg>
+        </div>
+        <p class="small muted">
+          The same IR that becomes a live <span class="mono">Workflow</span> also emits an exportable
+          <span class="mono">agent.py</span> you can run standalone with <span class="kbd">adk web</span> -
+          the canvas and the CLI run the same graph.
+        </p>
+      </section>
+
+      <!-- 4. Data flow -->
+      <section id="data-flow" class="card learn-section">
+        <h2>4. Data flow and state</h2>
+        <p>
+          Every node returns an <span class="mono">Event</span> with up to four fields, and each one has a
+          different audience:
+        </p>
+        <div class="event-grid">
+          <div class="card event-card"><span class="chip">output</span><p class="small">Feeds the next node's <span class="mono">node_input</span>.</p></div>
+          <div class="card event-card"><span class="chip">message</span><p class="small">User-facing text only - never read by downstream nodes.</p></div>
+          <div class="card event-card"><span class="chip">state</span><p class="small">Persists in the session, keyed by prefix.</p></div>
+          <div class="card event-card"><span class="chip">route</span><p class="small">Names the branch a router or loop gate should take.</p></div>
+        </div>
+        <p>State keys carry a prefix that decides their scope:</p>
+        <p>
+          <span class="kbd">app:</span> <span class="kbd">user:</span> <span class="kbd">temp:</span>
+          <span class="kbd">(none)</span>
+        </p>
+        <p class="small muted">
+          No prefix means session-scoped state. <span class="mono">temp:</span> is scratch space for the current
+          run (like the revision counter in the Loop example above).
+        </p>
+        <p>
+          Agent instructions can template plain state with <span class="mono">&#123;key&#125;</span> and a typed
+          predecessor's field with <span class="mono">&#123;Model.field&#125;</span>. Pydantic
+          <span class="mono">input_schema</span> / <span class="mono">output_schema</span> validate a node's
+          contract at the boundary. On an <span class="mono">LlmAgent</span>,
+          <span class="mono">output_key</span> saves the reply straight to state, and
+          <span class="mono">mode</span> is one of <span class="kbd">chat</span>, <span class="kbd">task</span>
+          or <span class="kbd">single_turn</span>.
+        </p>
+        <div class="code">
+          <div class="code-head">
+            <span class="mono small faint">writer_agent.py</span>
+            <button type="button" class="btn btn-ghost btn-copy" (click)="copy('data-flow', dataFlowCode)">{{ copiedId() === 'data-flow' ? 'Copied' : 'Copy' }}</button>
+          </div>
+          <pre><code class="mono">{{ dataFlowCode }}</code></pre>
+        </div>
+      </section>
+
+      <!-- 5. Graph vs dynamic -->
+      <section id="graph-vs-dynamic" class="card learn-section">
+        <h2>5. Graph workflows vs. dynamic workflows</h2>
+        <p>Stratum can compile a spec into either shape. Both run on the same ADK Runner.</p>
+        <div class="compare-grid">
+          <div class="card compare-card">
+            <span class="tag">Graph mode</span>
+            <p class="small">
+              Static edges, fully visual, nothing decided at runtime by a model. Because the model never
+              chooses where control flows next, this closes off a whole class of prompt-injection attacks
+              that target routing.
+            </p>
+            <div class="code">
+              <div class="code-head">
+                <span class="mono small faint">graph_mode.py</span>
+                <button type="button" class="btn btn-ghost btn-copy" (click)="copy('graph-mode', graphModeCode)">{{ copiedId() === 'graph-mode' ? 'Copied' : 'Copy' }}</button>
+              </div>
+              <pre><code class="mono">{{ graphModeCode }}</code></pre>
+            </div>
+          </div>
+          <div class="card compare-card">
+            <span class="tag">Dynamic mode</span>
+            <p class="small">
+              One orchestrator function drives everything with ordinary Python - loops, ifs,
+              <span class="mono">asyncio.gather</span> for fan-out. ADK checkpoints every
+              <span class="mono">ctx.run_node</span> call, so resuming after a pause does not re-run children
+              that already finished.
+            </p>
+            <div class="code">
+              <div class="code-head">
+                <span class="mono small faint">dynamic_mode.py</span>
+                <button type="button" class="btn btn-ghost btn-copy" (click)="copy('dynamic-mode', dynamicModeCode)">{{ copiedId() === 'dynamic-mode' ? 'Copied' : 'Copy' }}</button>
+              </div>
+              <pre><code class="mono">{{ dynamicModeCode }}</code></pre>
+            </div>
+          </div>
+        </div>
+        <p class="small muted">
+          Default to graph mode - it is auditable and safe against routing injection. Reach for dynamic mode
+          when the branching genuinely cannot be enumerated up front, or when you need Python-level control
+          (retries, dynamic fan-out width, early exit) that a static edge list cannot express.
+        </p>
+      </section>
+
+      <!-- 6. Three meanings of dynamic -->
+      <section id="dynamic-meanings" class="card learn-section">
+        <h2>6. "Dynamic" means three different things here</h2>
+        <p>It is worth being precise, because the word gets overloaded:</p>
+        <ol class="numbered-list">
+          <li>
+            <strong>Runtime-composed graphs.</strong> Stratum compiles a JSON spec into a live
+            <span class="mono">Workflow</span> per request - no redeploy - and specs can be stored per tenant
+            or per user. This is what "editing a graph in Stratum" means.
+          </li>
+          <li>
+            <strong>ADK dynamic workflows.</strong> The <span class="mono">&#64;node</span> /
+            <span class="mono">ctx.run_node</span> pattern from section 5 - control flow expressed as Python
+            inside one node, rather than as edges.
+          </li>
+          <li>
+            <strong>Agent-planned graphs.</strong> A planner LLM emits a <span class="mono">GraphSpec</span>,
+            which is validated by the exact same rules as a human-edited one before it is compiled. The model
+            proposes structure; it never bypasses validation.
+          </li>
+        </ol>
+        <p class="small muted">
+          Meaning (c) is a pattern Stratum's architecture enables - the validator does not care who wrote the
+          spec - not a feature that ships today.
+        </p>
+      </section>
+
+      <!-- 7. Human in the loop -->
+      <section id="human-loop" class="card learn-section">
+        <h2>7. Human-in-the-loop resume</h2>
+        <p>A gate node does not block a thread - it suspends the run and hands control to the UI.</p>
+        <ol class="numbered-list">
+          <li>The node yields <span class="mono">RequestInput(message=..., payload=...)</span>.</li>
+          <li>
+            The runner emits a function call named <span class="kbd">adk_request_input</span> carrying an
+            interrupt id, then stops.
+          </li>
+          <li>The UI renders an approve / reject card from that payload.</li>
+          <li>
+            The client sends back a <span class="kbd">function_response</span> with the same name, the same
+            id, and <span class="mono">&#123;"result": "approve"&#125;</span> - under the same
+            <span class="mono">invocation_id</span>.
+          </li>
+          <li>The workflow resumes from where it paused.</li>
+        </ol>
+        <div class="code">
+          <div class="code-head">
+            <span class="mono small faint">function_response.json</span>
+            <button type="button" class="btn btn-ghost btn-copy" (click)="copy('resume', resumeCode)">{{ copiedId() === 'resume' ? 'Copied' : 'Copy' }}</button>
+          </div>
+          <pre><code class="mono">{{ resumeCode }}</code></pre>
+        </div>
+        <p class="small muted">
+          If the asking node has <span class="mono">rerun_on_resume=False</span>, its output on resume simply
+          becomes the human's answer - it does not execute again.
+        </p>
+      </section>
+
+      <!-- 8. Production checklist -->
+      <section id="production" class="card learn-section">
+        <h2>8. Production checklist</h2>
+        <div class="checklist-grid">
+          @for (item of checklist; track item.title) {
+            <article class="card checklist-card">
+              <h3 class="small-h">{{ item.title }}</h3>
+              <p class="small muted">{{ item.body }}</p>
+            </article>
+          }
+        </div>
+        <div class="code">
+          <div class="code-head">
+            <span class="mono small faint">production.py</span>
+            <button type="button" class="btn btn-ghost btn-copy" (click)="copy('prod', prodCode)">{{ copiedId() === 'prod' ? 'Copied' : 'Copy' }}</button>
+          </div>
+          <pre><code class="mono">{{ prodCode }}</code></pre>
+        </div>
+        <div class="code">
+          <div class="code-head">
+            <span class="mono small faint">migration_1x_to_2x.py</span>
+            <button type="button" class="btn btn-ghost btn-copy" (click)="copy('migration', migrationCode)">{{ copiedId() === 'migration' ? 'Copied' : 'Copy' }}</button>
+          </div>
+          <pre><code class="mono">{{ migrationCode }}</code></pre>
+        </div>
+      </section>
+
+      <section class="learn-cta">
+        <a routerLink="/" class="btn btn-primary">Open the Studio</a>
+      </section>
+    </main>
+  </div>
+</div>

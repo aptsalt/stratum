@@ -1,0 +1,5 @@
+google-adk==2.9.0
+fastapi
+uvicorn
+python-dotenv
+pytest

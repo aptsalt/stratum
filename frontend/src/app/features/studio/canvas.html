@@ -1,0 +1,171 @@
+<div class="scroller" (click)="clearSelection()">
+  <div class="content" #content cdkDropListGroup [class.has-lineage]="lineage()">
+    <svg class="edges" [attr.width]="size().w" [attr.height]="size().h" aria-hidden="true">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" class="arrow-head" />
+        </marker>
+      </defs>
+      @for (p of paths(); track p.id) {
+        <path
+          [attr.d]="p.d"
+          class="edge"
+          [attr.data-kind]="p.kind"
+          [attr.data-state]="edgeState(p)"
+          [class.faded]="edgeDimmed(p)"
+          marker-end="url(#arrow)"
+        />
+      }
+    </svg>
+
+    @for (p of paths(); track p.id) {
+      @if (p.label) {
+        <span
+          class="edge-label"
+          [attr.data-kind]="p.kind"
+          [attr.data-state]="edgeState(p)"
+          [class.faded]="edgeDimmed(p)"
+          [style.left.px]="p.lx"
+          [style.top.px]="p.ly"
+          >{{ p.label }}</span
+        >
+      }
+    }
+
+    <div class="terminal" data-anchor="START" [class.lit]="run.runId()">
+      <span class="term-icon">▶</span> START <em>user input</em>
+    </div>
+
+    @for (layer of store.spec().layers; track layer.id; let i = $index) {
+      <div class="inserter" [class.open]="inserting() === i">
+        <button class="ins-btn" type="button" (click)="toggleInsert(i, $event)" [attr.aria-label]="'Insert layer before ' + (i + 1)">＋</button>
+        @if (inserting() === i) {
+          <div class="ins-menu" (click)="stop($event)">
+            @for (k of kindOrder; track k) {
+              <button type="button" [attr.data-kind]="k" (click)="insert(i, k, $event)">
+                <span class="g">{{ kinds[k].glyph }}</span>{{ kinds[k].label }}
+              </button>
+            }
+          </div>
+        }
+      </div>
+
+      <section
+        class="layer"
+        [attr.data-kind]="layer.kind"
+        [class.selected]="store.selection()?.id === layer.id"
+        (click)="selectLayer(layer, $event)"
+      >
+        <header class="layer-head">
+          <span class="layer-num mono">{{ pad(i + 1) }}</span>
+          <input
+            class="layer-title"
+            [value]="layer.title"
+            (input)="rename(layer, $event)"
+            (click)="stop($event)"
+            [attr.aria-label]="'Layer ' + (i + 1) + ' title'"
+            spellcheck="false"
+          />
+          <div class="kind-wrap">
+            <button class="kind-pill" type="button" (click)="toggleKindMenu(layer, $event)" [title]="kinds[layer.kind].blurb">
+              <span class="g">{{ kinds[layer.kind].glyph }}</span>{{ kinds[layer.kind].label }}<span class="caret">▾</span>
+            </button>
+            @if (kindMenu() === layer.id) {
+              <div class="kind-menu" (click)="stop($event)">
+                @for (k of kindOrder; track k) {
+                  <button type="button" [attr.data-kind]="k" [class.on]="layer.kind === k" (click)="setKind(layer, k, $event)">
+                    <span class="g">{{ kinds[k].glyph }}</span>
+                    <span><b>{{ kinds[k].label }}</b><small>{{ kinds[k].blurb }}</small></span>
+                  </button>
+                }
+              </div>
+            }
+          </div>
+          <span class="layer-meta">{{ meta(layer) }}</span>
+          <span class="grow"></span>
+          @if (layer.kind === 'stage') {
+            <button class="mini-btn" type="button" (click)="stop($event); store.addNode(layer.id)" title="Add an agent to this layer">＋ Agent</button>
+            <button class="mini-btn" type="button" (click)="stop($event); store.addNode(layer.id, 'code')" title="Add a deterministic code node (no model call)">＋ ƒ</button>
+          }
+          <button class="icon-btn" type="button" [disabled]="i === 0" (click)="stop($event); store.moveLayer(layer.id, -1)" title="Move up">↑</button>
+          <button class="icon-btn" type="button" [disabled]="i === store.spec().layers.length - 1" (click)="stop($event); store.moveLayer(layer.id, 1)" title="Move down">↓</button>
+          <button class="icon-btn danger" type="button" (click)="stop($event); store.removeLayer(layer.id)" title="Delete layer">✕</button>
+        </header>
+
+        <div
+          class="lane"
+          cdkDropList
+          cdkDropListOrientation="mixed"
+          [cdkDropListData]="layer.id"
+          [cdkDropListDisabled]="layer.kind !== 'stage'"
+          [cdkDropListEnterPredicate]="canEnter"
+          (cdkDropListDropped)="drop($event)"
+          [class.loop-lane]="layer.kind === 'loop'"
+        >
+          @for (n of layer.nodes; track n.id) {
+            <article
+              class="node"
+              cdkDrag
+              [cdkDragData]="n.id"
+              [cdkDragDisabled]="layer.kind !== 'stage'"
+              [attr.data-anchor]="n.id"
+              [attr.data-kind]="n.kind"
+              [attr.data-status]="statusOf(n)"
+              [class.selected]="store.selection()?.id === n.id"
+              [class.faded]="lineage() && !lineage()!.has(n.id)"
+              (click)="selectNode(n, $event)"
+              tabindex="0"
+              (keydown.enter)="selectNode(n, $event)"
+            >
+              <div class="node-placeholder" *cdkDragPlaceholder></div>
+              @if (store.joins().has(n.name)) {
+                <span class="join-badge" title="ADK JoinNode — waits for every upstream, then passes a dict">⋈ join</span>
+              }
+              <div class="node-top">
+                <span class="node-icon">{{ icon(n, layer) }}</span>
+                <span class="node-name mono">{{ n.name }}</span>
+                <span class="node-state">
+                  @switch (statusOf(n)) {
+                    @case ('running') { <span class="spinner"></span> }
+                    @case ('done') { <span class="ok">✓</span><span class="ms mono">{{ duration(n) }}</span> }
+                    @case ('waiting') { <span class="wait">⏸ you</span> }
+                    @case ('skipped') { <span class="skip">skipped</span> }
+                  }
+                </span>
+              </div>
+              <p class="node-instr">{{ n.instruction || 'No instruction yet — click to edit.' }}</p>
+              <div class="node-chips">
+                @if (role(n, layer); as r) { <span class="chip role">{{ r }}</span> }
+                @if (n.kind === 'agent') { <span class="chip">{{ modelOf(n) }}</span> }
+                @for (t of n.tools; track t) { <span class="chip tool">⌕ search</span> }
+                @if (routedLabel().get(n.id); as label) { <span class="chip route">⑂ {{ label }}</span> }
+                @if (n.dependsOn) { <span class="chip deps" title="Custom inputs">⇢ {{ n.dependsOn.length }} input{{ n.dependsOn.length === 1 ? '' : 's' }}</span> }
+                @if (run.nodeRun(n.name).iterations > 1) { <span class="chip iter">× {{ run.nodeRun(n.name).iterations }}</span> }
+              </div>
+            </article>
+          }
+          @if (layer.kind === 'stage' && layer.nodes.length > 1) {
+            <span class="parallel-rail" aria-hidden="true"></span>
+          }
+        </div>
+      </section>
+    }
+
+    <div class="inserter" [class.open]="inserting() === store.spec().layers.length">
+      <button class="ins-btn wide" type="button" (click)="toggleInsert(store.spec().layers.length, $event)">＋ Add layer</button>
+      @if (inserting() === store.spec().layers.length) {
+        <div class="ins-menu" (click)="stop($event)">
+          @for (k of kindOrder; track k) {
+            <button type="button" [attr.data-kind]="k" (click)="insert(store.spec().layers.length, k, $event)">
+              <span class="g">{{ kinds[k].glyph }}</span>{{ kinds[k].label }}
+            </button>
+          }
+        </div>
+      }
+    </div>
+
+    <div class="terminal end" data-anchor="END" [class.lit]="run.status() === 'completed'">
+      <span class="term-icon">■</span> END <em>final output</em>
+    </div>
+  </div>
+</div>

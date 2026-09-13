@@ -1,0 +1,263 @@
+<aside class="inspector" aria-label="Inspector">
+  @if (hit(); as h) {
+    <!-- ───────── NODE ───────── -->
+    <header class="ins-head" [attr.data-kind]="h.node.kind === 'agent' ? h.layer.kind : h.node.kind">
+      <div>
+        <span class="eyebrow">{{ nodeTitle() }}</span>
+        <h3 class="mono">{{ h.node.name }}</h3>
+        <button class="crumb" type="button" (click)="locate(null, h.layer.id)">in {{ h.layerIndex + 1 }} · {{ h.layer.title || 'untitled layer' }} →</button>
+      </div>
+      <div class="head-actions">
+        @if (h.layer.kind === 'stage') {
+          <button class="icon-btn" type="button" (click)="store.duplicateNode(h.node.id)" title="Duplicate">⧉</button>
+          <button class="icon-btn danger" type="button" (click)="store.removeNode(h.node.id)" title="Delete (Del)">✕</button>
+        }
+      </div>
+    </header>
+
+    <div class="ins-body">
+      <div class="field">
+        <label for="n-name">Name <span class="faint">python identifier</span></label>
+        <input id="n-name" class="input mono" [value]="h.node.name" (change)="store.updateNode(h.node.id, { name: value($event) })" spellcheck="false" />
+      </div>
+
+      @if (h.layer.kind === 'stage') {
+        <div class="field">
+          <label>Node type</label>
+          <div class="seg">
+            <button type="button" [class.on]="h.node.kind === 'agent'" (click)="store.updateNode(h.node.id, { kind: 'agent' })">✦ LLM agent</button>
+            <button type="button" [class.on]="h.node.kind === 'code'" (click)="store.updateNode(h.node.id, { kind: 'code' })">ƒ Code (0 tokens)</button>
+          </div>
+        </div>
+      }
+
+      @switch (h.node.kind) {
+        @case ('agent') {
+          <div class="field">
+            <label for="n-model">Model</label>
+            <select id="n-model" class="select" (change)="setModel(h.node, $event)">
+              <option value="" [selected]="!h.node.model">Graph default ({{ store.spec().model }})</option>
+              @for (m of models; track m) {
+                <option [value]="m" [selected]="h.node.model === m">{{ m }}</option>
+              }
+            </select>
+          </div>
+          <div class="field">
+            <label for="n-instr">Instruction</label>
+            <textarea id="n-instr" class="textarea" rows="6" [value]="h.node.instruction" (input)="store.updateNode(h.node.id, { instruction: value($event) })" placeholder="What should this agent do with its inputs?"></textarea>
+            @if (h.layer.kind === 'router') {
+              <span class="hint">Stratum appends the route labels — the model answers with one label.</span>
+            } @else if (h.layer.kind === 'loop' && h.layer.nodes[1]?.id === h.node.id) {
+              <span class="hint">The critic must start with <b>PASS</b> or <b>REVISE:</b> — Stratum appends that contract.</span>
+            }
+          </div>
+          <div class="field">
+            <label>Tools</label>
+            <div class="toggles">
+              @for (t of tools; track t.id) {
+                <button type="button" class="toggle" [class.on]="h.node.tools.includes(t.id)" (click)="toggleTool(h.node, t.id)">
+                  <span class="switch"></span>{{ t.label }}
+                </button>
+              }
+            </div>
+          </div>
+        }
+        @case ('code') {
+          <div class="field">
+            <label>Operation</label>
+            <div class="seg">
+              <button type="button" [class.on]="h.node.op === 'merge'" (click)="store.updateNode(h.node.id, { op: 'merge' })">Merge inputs → markdown</button>
+              <button type="button" [class.on]="h.node.op === 'passthrough'" (click)="store.updateNode(h.node.id, { op: 'passthrough' })">Pass through</button>
+            </div>
+          </div>
+        }
+        @case ('human') {
+          <div class="field">
+            <label for="n-ask">Question for the approver</label>
+            <textarea id="n-ask" class="textarea" rows="3" [value]="h.node.instruction" (input)="store.updateNode(h.node.id, { instruction: value($event) })"></textarea>
+            <span class="hint">Reply <b>approve</b> to continue; anything else ends the run.</span>
+          </div>
+        }
+      }
+
+      <!-- inputs / dependencies -->
+      @if (routed(); as r) {
+        <section class="block">
+          <div class="label">Inputs</div>
+          <p class="note route">⑂ Runs only when the router picks <b class="mono">{{ r.label }}</b>. It receives the router's own input.</p>
+        </section>
+      } @else if (takesInputs()) {
+        <section class="block">
+          <div class="label">
+            Inputs
+            <button type="button" class="toggle small" [class.on]="h.node.dependsOn === null" (click)="store.setAutoDependencies(h.node.id, h.node.dependsOn !== null)">
+              <span class="switch"></span>Auto
+            </button>
+          </div>
+          <p class="hint">
+            @if (h.node.dependsOn === null) {
+              Consumes every output of the previous layer. Click any agent below to hand-pick — including earlier layers.
+            } @else {
+              Custom wiring. Skip-level inputs draw as dashed teal edges.
+            }
+          </p>
+          @for (g of depGroups(); track g.layer.id) {
+            <div class="dep-group">
+              <span class="dep-layer" [attr.data-kind]="g.layer.kind">{{ g.index + 1 }} · {{ g.layer.title }}</span>
+              <div class="dep-chips">
+                @for (d of g.nodes; track d.id) {
+                  <button type="button" class="dep" [class.on]="activeDeps().has(d.id)" [class.auto]="h.node.dependsOn === null" (click)="store.toggleDependency(h.node.id, d.id)">
+                    {{ activeDeps().has(d.id) ? '●' : '○' }} {{ d.name }}
+                  </button>
+                }
+              </div>
+            </div>
+          }
+          @if (activeDeps().size === 0) {
+            <p class="note">No inputs → starts from <b>START</b> (the user's message), in parallel with layer 1.</p>
+          }
+          @if (joinHint()) { <p class="note join">⋈ {{ joinHint() }}</p> }
+        </section>
+      }
+
+      @if (h.layer.kind === 'router') {
+        <section class="block">
+          <div class="label">Routes <span class="faint">→ next layer</span></div>
+          @for (r of h.node.routes; track r.target) {
+            <div class="route-row">
+              <input class="input mono lbl" [value]="r.label" (change)="store.updateRoute(h.node.id, r.target, { label: value($event) })" aria-label="Route label" />
+              <span class="arrow">→</span>
+              <button class="target mono" type="button" (click)="locate(r.target)">{{ store.index().get(r.target)?.node?.name }}</button>
+              <input class="input when" [value]="r.when" (input)="store.updateRoute(h.node.id, r.target, { when: value($event) })" placeholder="when… (e.g. refunds, invoices)" aria-label="Route condition" />
+            </div>
+          }
+          <p class="hint">Add agents to the next layer to create more routes. Mock engine matches words in “when”.</p>
+        </section>
+      }
+
+      <section class="block adk">
+        <div class="label">Compiles to</div>
+        <code>{{ adkHint() }}</code>
+      </section>
+
+      @if (run.nodeRun(h.node.name).status !== 'idle') {
+        <section class="block">
+          <div class="label">Last run <span class="faint mono">{{ duration(h.node) }}{{ run.nodeRun(h.node.name).tokens ? ' · ' + run.nodeRun(h.node.name).tokens + ' tok' : '' }}</span></div>
+          <pre class="output">{{ output(h.node) || 'running…' }}</pre>
+        </section>
+      }
+    </div>
+  } @else if (layerSel(); as ls) {
+    <!-- ───────── LAYER ───────── -->
+    <header class="ins-head" [attr.data-kind]="ls.layer.kind">
+      <div>
+        <span class="eyebrow">Layer {{ ls.index + 1 }}</span>
+        <h3>{{ ls.layer.title || 'Untitled layer' }}</h3>
+      </div>
+      <div class="head-actions">
+        <button class="icon-btn danger" type="button" (click)="store.removeLayer(ls.layer.id)" title="Delete layer">✕</button>
+      </div>
+    </header>
+    <div class="ins-body">
+      <div class="field">
+        <label for="l-title">Title</label>
+        <input id="l-title" class="input" [value]="ls.layer.title" (input)="store.updateLayer(ls.layer.id, { title: value($event) })" />
+      </div>
+      <div class="field">
+        <label>Layer type</label>
+        <div class="kind-grid">
+          @for (k of kindOrder; track k) {
+            <button type="button" class="kind-card" [attr.data-kind]="k" [class.on]="ls.layer.kind === k" (click)="store.setLayerKind(ls.layer.id, k)">
+              <span class="g">{{ kinds[k].glyph }}</span>
+              <b>{{ kinds[k].label }}</b>
+              <small>{{ kinds[k].blurb }}</small>
+            </button>
+          }
+        </div>
+      </div>
+      @if (ls.layer.kind === 'loop') {
+        <div class="field">
+          <label>Max rounds</label>
+          <div class="stepper">
+            <button class="icon-btn" type="button" (click)="setIterations(ls.layer, -1)">−</button>
+            <b class="mono">{{ ls.layer.maxIterations }}</b>
+            <button class="icon-btn" type="button" (click)="setIterations(ls.layer, 1)">＋</button>
+            <span class="hint">hard cap even if the critic never says PASS</span>
+          </div>
+        </div>
+      }
+      <section class="block adk">
+        <div class="label">Compiles to</div>
+        <code>{{ kinds[ls.layer.kind].adk }}</code>
+      </section>
+      <section class="block">
+        <div class="label">Nodes</div>
+        @for (n of ls.layer.nodes; track n.id) {
+          <button type="button" class="node-row" (click)="locate(n.id)"><span class="mono">{{ n.name }}</span><span class="faint">{{ n.kind }}</span></button>
+        }
+        @if (ls.layer.kind === 'stage') {
+          <div class="row-actions">
+            <button class="btn" type="button" (click)="store.addNode(ls.layer.id)">＋ Agent</button>
+            <button class="btn" type="button" (click)="store.addNode(ls.layer.id, 'code')">＋ Code node</button>
+          </div>
+        }
+      </section>
+    </div>
+  } @else {
+    <!-- ───────── GRAPH ───────── -->
+    <header class="ins-head">
+      <div>
+        <span class="eyebrow">Graph</span>
+        <h3>{{ store.spec().name }}</h3>
+      </div>
+    </header>
+    <div class="ins-body">
+      <div class="stats">
+        <div><b class="num">{{ store.stats().layers }}</b><span>layers</span></div>
+        <div><b class="num">{{ store.stats().agents }}</b><span>LLM agents</span></div>
+        <div><b class="num">{{ store.stats().width }}×</b><span>max parallel</span></div>
+        <div><b class="num">≤{{ store.stats().calls }}</b><span>model calls / run</span></div>
+      </div>
+      <div class="field">
+        <label for="g-name">Name</label>
+        <input id="g-name" class="input" [value]="store.spec().name" (input)="store.updateGraph({ name: value($event) })" />
+      </div>
+      <div class="field">
+        <label for="g-desc">Description</label>
+        <textarea id="g-desc" class="textarea" rows="3" [value]="store.spec().description" (input)="store.updateGraph({ description: value($event) })"></textarea>
+      </div>
+      <div class="field">
+        <label for="g-model">Default model</label>
+        <select id="g-model" class="select" (change)="store.updateGraph({ model: value($event) })">
+          @for (m of models; track m) {
+            <option [value]="m" [selected]="store.spec().model === m">{{ m }}</option>
+          }
+        </select>
+      </div>
+
+      <section class="block">
+        <div class="label">Health</div>
+        @if (store.offline()) {
+          <p class="note bad">Backend offline — start it with <code>npm run api</code>.</p>
+        } @else if (store.diagnostics().length === 0) {
+          <p class="note ok">✓ Valid — compiles to {{ store.mode() === 'graph' ? 'a graph Workflow' : 'a dynamic @node orchestrator' }}.</p>
+        } @else {
+          @for (d of store.diagnostics(); track $index) {
+            <button type="button" class="diag" [attr.data-level]="d.level" (click)="locate(d.nodeId, d.layerId)">
+              <span>{{ d.level === 'error' ? '●' : '▲' }}</span>{{ d.message }}
+            </button>
+          }
+        }
+      </section>
+
+      <section class="block tips">
+        <div class="label">Getting around</div>
+        <ul>
+          <li>Click a layer or agent to edit it. Drag agents between <b>stage</b> layers.</li>
+          <li>Hover between layers and hit <b>＋</b> to insert one.</li>
+          <li><span class="kbd">Ctrl</span> <span class="kbd">K</span> for every action · <span class="kbd">Ctrl</span> <span class="kbd">↵</span> to run.</li>
+        </ul>
+      </section>
+    </div>
+  }
+</aside>

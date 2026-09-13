@@ -11,6 +11,20 @@
 
 ![layers](https://img.shields.io/badge/ADK-2.9-7c6cff) ![angular](https://img.shields.io/badge/Angular-21%20zoneless-38d3c3) ![fastapi](https://img.shields.io/badge/FastAPI-SSE-36d399)
 
+![Stratum — a research graph running live: parallel agents overlap on the timeline, a JoinNode gates the synthesizer](docs/screenshots/01-live-run.png)
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Human gate](docs/screenshots/02-human-gate.png)<br>**Human gate** — ADK paused on `RequestInput`; approve or reject resumes the same invocation | ![Router](docs/screenshots/04-router-branch.png)<br>**Router** — exactly one branch runs; the others are marked *not taken* |
+| ![Chat](docs/screenshots/06-chat-proposal.png)<br>**Chat** — English in, a previewable proposal with a +/− diff out | ![Script](docs/screenshots/07-script-editor.png)<br>**Script** — the graph as text, live preview, synced both ways |
+| ![Python export](docs/screenshots/08-python-export.png)<br>**Export** — `agent.py` for graph or dynamic workflows, generated from the IR that ran | ![Compiled graph](docs/screenshots/09-compiled-graph.png)<br>**Compiled graph** — the JoinNodes, route mappers and loop gates ADK actually receives |
+| ![Run complete](docs/screenshots/03-run-complete.png)<br>**Timeline** — loop rounds (×2) and the full event stream | ![Light theme](docs/screenshots/10-light-theme.png)<br>**Light theme** |
+| ![Chat welcome](docs/screenshots/05-chat-welcome.png)<br>**Chat welcome** — examples, including the one-line script syntax | ![Guide](docs/screenshots/11-learn.png)<br>**How it works** — the ADK 2.x mental model, in-app |
+
+Regenerate with `python e2e/capture_screenshots.py` while the API (:8000) and UI (:4200) are running.
+
 ## Quick start
 
 ```bash

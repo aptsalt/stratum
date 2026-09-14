@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 load_dotenv()
 
 from stratum import chat, codegen, script  # noqa: E402
-from stratum.compiler import diagnose, lower  # noqa: E402
+from stratum.ir import diagnose, lower  # noqa: E402
 from stratum.runs import RUNS, create_run, gemini_available, resume_message, stream, user_message  # noqa: E402
 from stratum.spec import Diagnostic, GraphSpec  # noqa: E402
 from stratum.templates import TEMPLATES  # noqa: E402

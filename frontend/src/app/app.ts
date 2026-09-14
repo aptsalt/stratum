@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { ApiService } from './core/api';
+import { DEMO } from './core/demo';
+import { DemoEngine } from './core/demo-engine';
 import { GraphStore } from './core/graph-store';
 import { Health } from './core/models';
 import { UiStore } from './core/ui-store';
@@ -17,10 +19,16 @@ export class App {
   private readonly graph = inject(GraphStore);
   private readonly api = inject(ApiService);
 
+  readonly demo = DEMO;
+  readonly engine = DEMO ? inject(DemoEngine) : null;
   readonly health = signal<Health | null>(null);
   readonly checked = signal(false);
   readonly status = computed(() => {
     const h = this.health();
+    if (this.engine) {
+      if (this.engine.failed()) return { tone: 'bad', text: 'Demo failed to load' };
+      return this.engine.ready() ? { tone: 'ok', text: 'In-browser demo · simulated runs' } : { tone: '', text: 'Loading compiler…' };
+    }
     if (!this.checked()) return { tone: '', text: 'Connecting…' };
     if (!h) return { tone: 'bad', text: 'Backend offline' };
     return { tone: 'ok', text: `ADK ${h.adk} · ${h.engines.gemini ? 'Gemini ready' : 'mock engine'}` };

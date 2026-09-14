@@ -75,6 +75,26 @@
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true
+            },
+            "demo": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "500kB",
+                  "maximumError": "1MB"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "16kB",
+                  "maximumError": "32kB"
+                }
+              ],
+              "outputHashing": "all",
+              "outputPath": "dist/demo",
+              "baseHref": "/stratum-demo/",
+              "define": {
+                "STRATUM_DEMO": "true"
+              }
             }
           },
           "defaultConfiguration": "production"

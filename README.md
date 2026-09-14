@@ -11,6 +11,8 @@
 
 ![layers](https://img.shields.io/badge/ADK-2.9-7c6cff) ![angular](https://img.shields.io/badge/Angular-21%20zoneless-38d3c3) ![fastapi](https://img.shields.io/badge/FastAPI-SSE-36d399)
 
+**▶ Live demo: https://aptsalt.github.io/stratum-demo/** — no install. The Python compiler and parsers run in your browser via WebAssembly (Pyodide) and agent runs are simulated with ADK's execution semantics; run locally (below) for the real ADK runtime. Redeploy with `bash scripts/deploy-demo.sh`.
+
 ![Stratum — a research graph running live: parallel agents overlap on the timeline, a JoinNode gates the synthesizer](docs/screenshots/01-live-run.png)
 
 ## Screenshots
@@ -99,6 +101,9 @@ backend/
   stratum/script.py      Stratum Script parser + formatter (merge-with-base)
   stratum/nl.py          offline English → graph builder and edit commands
   stratum/chat.py        chat turn → proposal (script / Gemini / offline parser)
+  stratum/ir.py          ADK-free lowering, validation, mock text (shared by server and browser)
+  stratum/sim.py         in-browser run simulator (same event protocol as runs.py)
+  stratum/web.py         JSON bridge the Pyodide demo calls
   tests/                 end-to-end runtime tests
 frontend/src/app/
   core/                  models, fetch/SSE client, GraphStore (undo/redo, normalize), RunStore

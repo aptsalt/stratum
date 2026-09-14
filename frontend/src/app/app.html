@@ -43,3 +43,23 @@
     <router-outlet />
   </main>
 </div>
+
+@if (engine && !engine.ready()) {
+  <div class="boot" role="status" aria-live="polite">
+    <div class="boot-card">
+      @if (engine.failed(); as err) {
+        <b>The in-browser compiler could not start</b>
+        <p class="boot-err">{{ err }}</p>
+        <p class="faint small">It needs to download Pyodide from cdn.jsdelivr.net — check your network, then reload.</p>
+      } @else {
+        <span class="boot-spin"></span>
+        <b>Loading Stratum in your browser</b>
+        <p>{{ engine.stage() }}</p>
+        <p class="faint small">
+          Demo mode: the real Python compiler, script and chat parsers run locally via WebAssembly (Pyodide); agent runs are
+          simulated with ADK's execution semantics. First visit ≈ 10 s, then cached.
+        </p>
+      }
+    </div>
+  </div>
+}

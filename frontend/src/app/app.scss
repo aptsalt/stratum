@@ -42,6 +42,22 @@
 
 .content { flex: 1; min-height: 0; overflow: auto; }
 
+.boot {
+  position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 1rem;
+  background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(6px); animation: fadeIn 0.2s ease;
+}
+.boot-card {
+  width: min(460px, 100%); display: flex; flex-direction: column; align-items: center; gap: 0.5rem; text-align: center;
+  padding: 1.6rem 1.5rem; border-radius: 18px; background: var(--panel); border: 1px solid var(--line-2); box-shadow: var(--shadow);
+}
+.boot-card b { font-size: 1.05rem; }
+.boot-card p { margin: 0; color: var(--muted); font-size: 0.86rem; line-height: 1.5; }
+.boot-err { color: var(--bad) !important; font-family: var(--mono); font-size: 0.76rem !important; }
+.boot-spin {
+  width: 30px; height: 30px; border-radius: 50%; margin-bottom: 0.3rem;
+  border: 3px solid var(--line-2); border-top-color: var(--brand-2); animation: spin 0.8s linear infinite;
+}
+
 @media (max-width: 1100px) {
   .brand-sub, .cmdk-text { display: none; }
   .cmdk { min-width: 0; }

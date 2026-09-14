@@ -6,7 +6,8 @@ exactly what ran in the Studio (minus the mock engine).
 
 from __future__ import annotations
 
-from .compiler import IR, _wf_name, group_edges, instruction_for, lower
+from .ir import IR, group_edges, instruction_for, lower
+from .ir import wf_name as _wf_name
 from .spec import AgentNode, GraphSpec, Layer
 
 HELPERS = '''

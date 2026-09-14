@@ -6,7 +6,7 @@ import json
 import pytest
 
 from stratum import chat, nl, script
-from stratum.compiler import diagnose
+from stratum.ir import diagnose
 from stratum.runs import create_run, resume_message, stream, user_message
 from stratum.templates import TEMPLATES
 

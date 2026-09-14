@@ -13,7 +13,7 @@ from typing import Any, Literal
 from pydantic import BaseModel
 
 from . import nl, script
-from .compiler import diagnose
+from .ir import diagnose
 from .spec import GraphSpec
 
 GEMINI_RULES = """

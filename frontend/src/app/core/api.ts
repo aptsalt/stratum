@@ -1,4 +1,6 @@
 import { Injectable, InjectionToken, inject } from '@angular/core';
+import { DEMO } from './demo';
+import { DemoEngine } from './demo-engine';
 import { ChatReply, CompileMode, CompileResult, Diagnostic, Engine, GraphSpec, Health, ParseResult, RunEvent } from './models';
 
 export const API_BASE = new InjectionToken<string>('API_BASE', {
@@ -15,33 +17,37 @@ export class ApiError extends Error {
   }
 }
 
-/** Thin fetch client. Runs stream Server-Sent Events over a POST body. */
+/**
+ * Thin fetch client — runs stream Server-Sent Events over a POST body.
+ * In the static demo build every call goes to the in-browser DemoEngine instead.
+ */
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private readonly base = inject(API_BASE);
+  private readonly demo = DEMO ? inject(DemoEngine) : null;
 
   health(): Promise<Health> {
-    return this.json('/api/health');
+    return this.demo ? this.demo.health() : this.json('/api/health');
   }
 
   templates(): Promise<GraphSpec[]> {
-    return this.json('/api/templates');
+    return this.demo ? this.demo.templates() : this.json('/api/templates');
   }
 
   compile(spec: GraphSpec, mode: CompileMode, signal?: AbortSignal): Promise<CompileResult> {
-    return this.json('/api/compile', { spec, mode }, signal);
+    return this.demo ? this.demo.compile(spec, mode) : this.json('/api/compile', { spec, mode }, signal);
   }
 
   parseScript(text: string, base: GraphSpec | null, signal?: AbortSignal): Promise<ParseResult> {
-    return this.json('/api/script/parse', { text, base }, signal);
+    return this.demo ? this.demo.parseScript(text, base) : this.json('/api/script/parse', { text, base }, signal);
   }
 
   formatScript(spec: GraphSpec, compact: boolean, signal?: AbortSignal): Promise<{ text: string }> {
-    return this.json('/api/script/format', { spec, compact }, signal);
+    return this.demo ? this.demo.formatScript(spec, compact) : this.json('/api/script/format', { spec, compact }, signal);
   }
 
   chat(messages: { role: string; content: string; script?: string }[], spec: GraphSpec | null): Promise<ChatReply> {
-    return this.json('/api/chat', { messages, spec });
+    return this.demo ? this.demo.chat(messages, spec) : this.json('/api/chat', { messages, spec });
   }
 
   run(
@@ -49,11 +55,13 @@ export class ApiService {
     onEvent: (e: RunEvent) => void,
     signal?: AbortSignal,
   ): Promise<void> {
-    return this.stream('/api/runs', body, onEvent, signal);
+    return this.demo ? this.demo.run(body, onEvent) : this.stream('/api/runs', body, onEvent, signal);
   }
 
   resume(runId: string, interruptId: string, response: string, onEvent: (e: RunEvent) => void): Promise<void> {
-    return this.stream(`/api/runs/${runId}/resume`, { interruptId, response }, onEvent);
+    return this.demo
+      ? this.demo.resume(runId, interruptId, response, onEvent)
+      : this.stream(`/api/runs/${runId}/resume`, { interruptId, response }, onEvent);
   }
 
   private async json<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {

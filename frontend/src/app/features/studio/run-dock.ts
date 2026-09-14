@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal, viewChild } from '@angular/core';
+import { DEMO } from '../../core/demo';
 import { GraphStore } from '../../core/graph-store';
 import { PyHighlightPipe } from '../../core/highlight';
 import { Health, RunEvent } from '../../core/models';
@@ -25,6 +26,7 @@ export class RunDockComponent {
   readonly store = inject(GraphStore);
   readonly run = inject(RunStore);
   readonly ui = inject(UiStore);
+  readonly demo = DEMO;
   readonly geminiReady = input(false);
   readonly health = input<Health | null>(null);
 

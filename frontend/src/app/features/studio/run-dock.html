@@ -45,7 +45,10 @@
                 <span class="faint small">{{ store.mode() === 'graph' ? 'graph' : 'dynamic' }} workflow</span>
               </div>
               <p class="faint small engine-note">
-                @if (run.engine() === 'mock') {
+                @if (demo) {
+                  Demo mode: runs are simulated in your browser with ADK's execution semantics — fan-out, JoinNode, routes, loops,
+                  human gates. Clone the repo to run on the real ADK runtime.
+                } @else if (run.engine() === 'mock') {
                   The real ADK 2 engine runs your graph — fan-out, JoinNode, routes, loops, RequestInput — with model calls stubbed.
                 } @else {
                   Live Gemini calls via LlmAgent. Token usage is reported per node.
